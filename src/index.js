@@ -23,6 +23,30 @@ function queryDBRows(_db, sql, params_obj) {
 }
 
 app.get('/', async (req, res) => {
+
+	// get latest blocks example
+	const rows = await queryDBRows(db, `
+		SELECT *
+		FROM blocks
+		WHERE block_index
+		ORDER BY block_index DESC
+		LIMIT 5;
+	`, {});
+
+	const rowsAsBlockListElements = rows.map(row => {
+		const ihtml = `
+<li>
+	<strong>${row.block_index}</strong>
+	<ul>
+		<li>L: ${row.ledger_hash}</li>
+		<li>TX: ${row.txlist_hash}</li>
+		<li>M: ${row.messages_hash}</li>
+	</ul>
+</li>
+		`;
+		return ihtml.trim();
+	});
+
 	const html = `
 <!DOCTYPE html>
 <html>
@@ -30,6 +54,9 @@ app.get('/', async (req, res) => {
 
 <h1>xcp.dev</h1>
 <p>server side rendered proof of concept</p>
+
+<h2>Latest blocks:</h2>
+<ul>${rowsAsBlockListElements.join('')}</ul>
 
 </body>
 </html>
