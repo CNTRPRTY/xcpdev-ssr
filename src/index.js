@@ -2,38 +2,61 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const sqlite3 = require('sqlite3').verbose();
-
-// TODO using snapshot for now
-const DB_PATH = path.join(__dirname, '/v9611_b824787_counterparty.db');
-const db = new sqlite3.Database(DB_PATH, sqlite3.OPEN_READONLY);
+const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
 const app = express();
 app.use(cors());
 const port = 3000;
 
-// returns an array
-function queryDBRows(_db, sql, params_obj) {
-	return new Promise(function (resolve, reject) {
-		_db.all(sql, params_obj, function (err, rows) {
-			if (err) return reject(err);
-			else return resolve(rows);
-		});
-	});
+async function libApiRequestSql(sql) {
+	const lib_response = await libApiRequest('sql', { query: sql });
+	return lib_response.result; // rows
+}
+// counterparty-lib api proxy
+async function libApiRequest(method, params = null) {
+    const url = `http://counterparty:4000/api/`; // trailing slash required!
+    const username = 'rpc';
+    const password = 'rpc';
+    const options = {
+        "method": "POST",
+        "headers": {
+            "Authorization": "Basic " + Buffer.from(`${username}:${password}`).toString("base64")
+        }
+    };
+    const body = {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "method": method
+    };
+    if (params) {
+        body.params = params;
+    }
+    options.body = JSON.stringify(body);
+
+    const response = await fetch(url, options);
+    if (!response.ok) {
+        const errorTextPre = await response.text(); // can come empty
+        const errorText = errorTextPre.trim().length === 0 ? '' : ` ${errorTextPre}`; // add space if not empty
+        throw Error(`[${response.status}:${response.statusText}]${errorText}`);
+    }
+    const data = await response.json();
+
+    return data;
 }
 
 app.get('/', async (req, res) => {
 
 	// get latest blocks example
-	const rows = await queryDBRows(db, `
+	const sql = `
 		SELECT *
 		FROM blocks
 		WHERE block_index
 		ORDER BY block_index DESC
 		LIMIT 5;
-	`, {});
+	`;
+	const lib_response_rows = await libApiRequestSql(sql);
 
-	const rowsAsBlockListElements = rows.map(row => {
+	const rowsAsBlockListElements = lib_response_rows.map(row => {
 		const ihtml = `
 <li>
 	<strong>${row.block_index}</strong>
